@@ -11,8 +11,8 @@ SYSTEM_PROMPT = """ Ты — AI-агент, специализирующийся
 Твоя основная цель — генерировать корректный Python-код, сохранять его в файлы, тестировать выполнение и обеспечивать решение конкретных задач пользователя.
 
 Среда выполнения:
-- Операционная система: Ubuntu
-- Терминал: bash
+- Операционная система: Windows 11
+- Терминал: PowerShell
 - Версия Python по умолчанию: 3.12
 
 Твои возможности:
@@ -54,63 +54,88 @@ SYSTEM_PROMPT = """ Ты — AI-агент, специализирующийся
 
 TOOLS = [
     {
-        "name": "search",
-        "description": "Поиск информации в интернете",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Поисковый запрос"
-                }
-            },
-            "required": ["query"]
-        }
-    },
-    {
-        "name": "save_code",
-        "description": "Сохранение кода в файл",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "description": "Код для сохранения"
+        "type": "function",
+        "function": {
+            "name": "run_command",
+            "description": "Выполняет команду в командной строке или терминале и возвращает ответ.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Команда для выполнения в консоли. Пример: py .\\script.py"
+                    },
+                    "input_str": {
+                        "type": "string",
+                        "description": "Входные данные для скрипта (передаются в stdin). Если не нужны, укажи пустую строку."
+                    }
                 },
-                "filename": {
-                    "type": "string",
-                    "description": "Имя файла"
-                }
+                "required": ["command", "input_str"],
+                "additionalProperties": False
             },
-            "required": ["code", "filename"]
+            "strict": True
         }
     },
     {
-        "name": "run_command",
-        "description": "Выполнение команды в терминале",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "Команда для выполнения"
-                }
+        "type": "function",
+        "function": {
+            "name": "save_code",
+            "description": "Создает файлы с содержимым и сохраняет код в директории",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "Содержимое файла"
+                    },
+                    "filename": {
+                        "type": "string",
+                        "description": "Имя файла"
+                    }
+                },
+                "required": ["code", "filename"],
+                "additionalProperties": False
             },
-            "required": ["command"]
+            "strict": True
         }
     },
-{
-        "name": "fetch_page",
-        "description": "Открывает веб страницы и получает body из html структуры без iframe, svg и style",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "Ссылка для посещения веб сайта"
-                }
+    {
+        "type": "function",
+        "function": {
+            "name": "search",
+            "description": "Выполняет запрос в поисковую систему для получения информации в Интернете",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Текстовый запрос в поисковую систему"
+                    }
+                },
+                "required": ["query"],
+                "additionalProperties": False
             },
-            "required": ["url"]
+            "strict": True
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_page",
+            "description": "Открывает веб-страницы и получает их контент",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Ссылка для посещения веб-сайта"
+                    }
+                },
+                "required": ["url"],
+                "additionalProperties": False
+            },
+            "strict": True
         }
     }
 ]
+
