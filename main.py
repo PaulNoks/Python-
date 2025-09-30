@@ -10,13 +10,13 @@ from openai import AsyncOpenAI
 
 app = FastAPI()
 
-
 openai_client = AsyncOpenAI(
     base_url="https://oai.helicone.ai/v1",
     default_headers={
         "Helicone-Auth": f"Bearer {HELICONE_API_KEY}"
     }
 )
+
 
 @app.get("/")
 async def index():
@@ -32,7 +32,6 @@ async def websocket_endpoint(websocket: WebSocket):
     chat_history = [{
         "role": "system",
         "content": SYSTEM_PROMPT,
-
     }]
 
     try:
@@ -46,77 +45,100 @@ async def websocket_endpoint(websocket: WebSocket):
                 "content": user_input
             })
 
-
             while True:
-                ai_response = await openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=chat_history,
-                    tools=TOOLS,
-                    tool_choice="auto",
-                    parallel_tool_calls=True
+                try:
+                    ai_response = await openai_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=chat_history,
+                        tools=TOOLS,
+                        tool_choice="auto",
+                        parallel_tool_calls=True
                     )
 
-                ai_message = ai_response.choices[0].message
+                    ai_message = ai_response.choices[0].message
 
-                chat_history.append({
-                    "role": "assistant",
-                    "content": ai_message.content,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": tc.type,
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments
-                            }
-                        }
-                        for tc in ai_message.tool_calls
-                    ] if ai_message.tool_calls else None
-                })
-
-                if not ai_message.tool_calls:
-                    await websocket.send_text(json.dumps({
-                        "role": "assistant",
-                        "content": ai_message.content
-                }))
-                    break
-                for tool_call in ai_message.tool_calls:
-                    func_name = tool_call.function.name
-                    args = json.loads(tool_call.function.arguments)
-
-                    result = ""
-
-                    try:
-                        if func_name == "run_command":
-                            if "input_str" in args:
-                                result = run_command(args["command"], args["input_str"])
-                            else:
-                                result = run_command(args["command"])
-                        elif func_name == "save_code":
-                            result = save_code(args["code"], args["filename"])
-                        elif func_name == "search":
-                            result = search(args["query"])
-                        elif func_name == "fetch_page":
-                            result = await (args["url"])
-                        else:
-                            result = f"Неизвестная функция {func_name}"
-
-                    except Exception as e:
-                        logger.error(f"Ошибка вызова функции {func_name}: {str(e)}")
-                        result = f"Ошибка вызова функции {func_name} {str(e)}"
-
+                    # Добавляем сообщение AI в историю
                     chat_history.append({
-                        "role": "tool",
-                        "content": result,
-                        "tool_call_id" : tool_call.id
+                        "role": "assistant",
+                        "content": ai_message.content,
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": tc.type,
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments
+                                }
+                            }
+                            for tc in ai_message.tool_calls
+                        ] if ai_message.tool_calls else None
                     })
 
+                    if not ai_message.tool_calls:
+                        await websocket.send_text(json.dumps({
+                            "role": "assistant",
+                            "content": ai_message.content
+                        }))
+                        break
+
+                    # Уведомляем пользователя о выполнении функций
+                    tool_names = [tc.function.name for tc in ai_message.tool_calls]
+                    await websocket.send_text(json.dumps({
+                        "role": "system",
+                        "content": f"⚙️ Выполняю действия: {', '.join(tool_names)}..."
+                    }))
+
+                    for tool_call in ai_message.tool_calls:
+                        func_name = tool_call.function.name
+                        args = json.loads(tool_call.function.arguments)
+
+                        result = ""
+
+                        try:
+                            logger.info(f"Вызов функции: {func_name} с аргументами: {args}")
+
+                            if func_name == "run_command":
+                                if "input_str" in args:
+                                    result = run_command(args["command"], args["input_str"])
+                                else:
+                                    result = run_command(args["command"], "")
+                            elif func_name == "save_code":
+                                result = save_code(args["code"], args["filename"])
+                                # Уведомляем о создании файла
+                                await websocket.send_text(json.dumps({
+                                    "role": "system",
+                                    "content": f"✅ Создан файл: {args['filename']}"
+                                }))
+                            elif func_name == "search":
+                                result = search(args["query"])
+                            elif func_name == "fetch_page":
+                                result = await fetch_page(args["url"])
+                            else:
+                                result = f"Неизвестная функция {func_name}"
+
+                        except Exception as e:
+                            logger.error(f"Ошибка вызова функции {func_name}: {str(e)}")
+                            result = f"Ошибка вызова функции {func_name}: {str(e)[:2000]}"
+
+                        chat_history.append({
+                            "role": "tool",
+                            "content": result,
+                            "tool_call_id": tool_call.id
+                        })
+
+                except Exception as e:
+                    logger.error(f"Ошибка при обработке запроса: {str(e)}")
+                    await websocket.send_text(json.dumps({
+                        "role": "assistant",
+                        "content": f"❌ Произошла ошибка: {str(e)[:500]}"
+                    }))
+                    break
 
     except WebSocketDisconnect:
         logger.error("Клиент отсоединился")
+    except Exception as e:
+        logger.error(f"Критическая ошибка в WebSocket: {str(e)}")
 
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="localhost", port=8000, reload=True)
-
-
