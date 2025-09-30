@@ -4,7 +4,6 @@ import requests
 from loguru import logger
 from config import SERPER_API_KEY
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
 from bs4 import BeautifulSoup
 
 
@@ -75,56 +74,92 @@ def search(query: str) -> str:
         logger.error(f"Ошибка при поиске в интернете: {str(e)}")
         return f"Ошибка при поиске в интернете: {str(e)[:5000]}"
 
+
 async def fetch_page(url: str) -> str:
     logger.info(f"Получаю исходный код страницы: {url}")
+    browser = None
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=False,
-                args=["--disable-blink-features=AutomationControlled"]
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage"
+                ]
             )
             context = await browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/132.0.0.0 Safari/537.3"
+                    "Chrome/132.0.0.0 Safari/537.36"
                 ),
                 viewport={"width": 1280, "height": 800}
             )
+
+            # Ручной обход детектирования (современный подход)
+            await context.add_init_script('''
+                // Скрываем webdriver
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+
+                // Добавляем реалистичные плагины
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+
+                // Языки
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en', 'ru']
+                });
+
+               // Chrome runtime
+                window.chrome = {
+                    runtime: {}
+                };
+
+                // Permissions
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+            ''')
+
             page = await context.new_page()
 
-            await stealth_async(page)
-
-            await page.goto(url, wait_until="networkidle")
-
+            await page.goto(url, wait_until="networkidle", timeout=30000)
             page_content = await page.content()
-
             await page.screenshot(path="screenshot.png")
 
             soup = BeautifulSoup(page_content, "html.parser")
-
             for tag in soup(["script", "style", "svg", "iframe"]):
                 tag.decompose()
-
             for tag in soup.find_all(style=True):
                 del tag["style"]
 
-            return str(soup.body)[:25000] if soup.body else page_content[:25000]
+            await browser.close()
+
+            result = str(soup.body)[:25000] if soup.body else page_content[:25000]
+            logger.success("Страница успешно получена")
+            return result
 
     except Exception as e:
-        logger.error(f"Ошибка при посещении веб-сайта: {str(e)}")
-        return f"Ошибка при посещении веб-сайта: {str(e)[:5000]}"
+        logger.error(f"Ошибка: {str(e)}")
+        if browser:
+            try:
+                await browser.close()
+            except:
+                pass
+        return f"Ошибка: {str(e)[:5000]}"
 
 import asyncio
-
-
-
-
 async def main():
-        page = await fetch_page("https://example.com")
-        logger.debug(page)
+    page = await fetch_page("https://example.com")
+    print(page[:500])
 
 
 if __name__ == "__main__":
-        asyncio.run(main())
+    asyncio.run(main())
 
