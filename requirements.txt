@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+websockets
+loguru
+anthropic
+python-dotenv
+requests
+beautifulsoup4
+openai
+playwright-stealth==1.0.6
+playwright==1.40.0
+setuptools<81

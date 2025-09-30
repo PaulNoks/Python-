@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 800px;
+            height: 80vh;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
+
+        .chat-header h1 {
+            font-size: 24px;
+            font-weight: 300;
+        }
+
+        .status-indicator {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #2ecc71;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.bot {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            position: relative;
+        }
+
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.bot .message-bubble {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message-time {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .chat-input {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .message-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .send-button {
+            width: 50px;
+            height: 50px;
+            border: none;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            font-size: 18px;
+        }
+
+        .send-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 15px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .typing-dots {
+            display: inline-block;
+            animation: typing 1.4s infinite;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { opacity: 0; }
+            30% { opacity: 1; }
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #c33;
+        }
+
+        .connection-status {
+            padding: 10px;
+            text-align: center;
+            font-size: 12px;
+            background: #e8f5e8;
+            color: #2c5530;
+        }
+
+        .connection-status.error {
+            background: #ffeaea;
+            color: #721c24;
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                width: 95%;
+                height: 90vh;
+                border-radius: 10px;
+            }
+
+            .message-bubble {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>AI Чат Ассистент</h1>
+            <div class="status-indicator" id="statusIndicator"></div>
+        </div>
+
+        <div class="connection-status" id="connectionStatus">
+            Подключено к серверу
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot">
+                <div class="message-bubble">
+                    Привет! Я твой Python помощник!
+                    <div class="message-time">Сейчас</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            Ассистент печатает<span class="typing-dots">...</span>
+        </div>
+
+        <div class="chat-input">
+            <div class="input-container">
+                <input
+                    type="text"
+                    class="message-input"
+                    id="messageInput"
+                    placeholder="Введите ваше сообщение..."
+                    maxlength="1000"
+                >
+                <button class="send-button" id="sendButton">
+                    ➤
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class ChatInterface {
+            constructor() {
+                this.messagesContainer = document.getElementById('chatMessages');
+                this.messageInput = document.getElementById('messageInput');
+                this.sendButton = document.getElementById('sendButton');
+                this.typingIndicator = document.getElementById('typingIndicator');
+                this.connectionStatus = document.getElementById('connectionStatus');
+                this.statusIndicator = document.getElementById('statusIndicator');
+
+                // Конфигурация WebSocket
+                this.wsUrl = 'ws://localhost:8000/ws';
+                this.websocket = null;
+                this.isConnected = false;
+
+                this.init();
+            }
+
+            init() {
+                this.sendButton.addEventListener('click', () => this.sendMessage());
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+
+                // Автофокус на поле ввода
+                this.messageInput.focus();
+
+                // Подключение к WebSocket
+                this.connectWebSocket();
+            }
+
+            connectWebSocket() {
+                try {
+                    this.websocket = new WebSocket(this.wsUrl);
+
+                    this.websocket.onopen = () => {
+                        console.log('WebSocket подключен');
+                        this.isConnected = true;
+                        this.setConnectionStatus(true, 'Подключено к серверу');
+                    };
+
+                    this.websocket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.hideTyping();
+
+                            // Отображаем ответ от сервера
+                            const content = data.content || data.response || 'Получен пустой ответ';
+                            this.addMessage(content, 'bot');
+
+                        } catch (error) {
+                            console.error('Ошибка парсинга ответа:', error);
+                            this.hideTyping();
+                            this.showError('Ошибка обработки ответа сервера');
+                        }
+
+                        this.sendButton.disabled = false;
+                        this.messageInput.focus();
+                    };
+
+                    this.websocket.onclose = () => {
+                        console.log('WebSocket отключен');
+                        this.isConnected = false;
+                        this.setConnectionStatus(false, 'Соединение разорвано');
+
+                        // Попытка переподключения через 3 секунды
+                        setTimeout(() => {
+                            console.log('Попытка переподключения...');
+                            this.connectWebSocket();
+                        }, 3000);
+                    };
+
+                    this.websocket.onerror = (error) => {
+                        console.error('Ошибка WebSocket:', error);
+                        this.isConnected = false;
+                        this.setConnectionStatus(false, 'Ошибка подключения');
+                    };
+
+                } catch (error) {
+                    console.error('Ошибка создания WebSocket:', error);
+                    this.setConnectionStatus(false, 'Не удалось подключиться');
+                }
+            }
+
+            async sendMessage() {
+                const message = this.messageInput.value.trim();
+                if (!message || !this.isConnected) return;
+
+                // Отображаем сообщение пользователя
+                this.addMessage(message, 'user');
+                this.messageInput.value = '';
+                this.sendButton.disabled = true;
+
+                try {
+                    // Показываем индикатор печати
+                    this.showTyping();
+
+                    // Отправляем сообщение через WebSocket
+                    this.websocket.send(message);
+
+                } catch (error) {
+                    this.hideTyping();
+                    this.showError('Ошибка отправки сообщения: ' + error.message);
+                    this.sendButton.disabled = false;
+                    this.messageInput.focus();
+                }
+            }
+
+
+
+            addMessage(text, sender) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}`;
+
+                const bubbleDiv = document.createElement('div');
+                bubbleDiv.className = 'message-bubble';
+
+                const timeDiv = document.createElement('div');
+                timeDiv.className = 'message-time';
+                timeDiv.textContent = new Date().toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                bubbleDiv.innerHTML = text.replace(/\n/g, '<br>');
+                bubbleDiv.appendChild(timeDiv);
+                messageDiv.appendChild(bubbleDiv);
+
+                this.messagesContainer.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            showTyping() {
+                this.typingIndicator.style.display = 'block';
+                this.scrollToBottom();
+            }
+
+            hideTyping() {
+                this.typingIndicator.style.display = 'none';
+            }
+
+            showError(message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.textContent = message;
+                this.messagesContainer.appendChild(errorDiv);
+                this.scrollToBottom();
+
+                // Убираем сообщение об ошибке через 5 секунд
+                setTimeout(() => {
+                    errorDiv.remove();
+                }, 5000);
+            }
+
+            scrollToBottom() {
+                setTimeout(() => {
+                    this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+                }, 100);
+            }
+
+            setConnectionStatus(isConnected, message) {
+                this.connectionStatus.textContent = message;
+                this.connectionStatus.className = isConnected ? 'connection-status' : 'connection-status error';
+                this.statusIndicator.style.background = isConnected ? '#2ecc71' : '#e74c3c';
+
+                // Блокируем/разблокируем интерфейс в зависимости от соединения
+                this.messageInput.disabled = !isConnected;
+                this.sendButton.disabled = !isConnected;
+
+                if (isConnected) {
+                    this.messageInput.placeholder = 'Введите ваше сообщение...';
+                } else {
+                    this.messageInput.placeholder = 'Нет соединения с сервером...';
+                }
+            }
+        }
+
+        // Инициализация чата при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            new ChatInterface();
+        });
+    </script>
+</body>
+</html>
