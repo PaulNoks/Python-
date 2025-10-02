@@ -3,222 +3,214 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-HELICONE_API_KEY = os.getenv('HELICONE_API_KEY')
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 SERPER_API_KEY = os.getenv('SERPER_API_KEY')
-SYSTEM_PROMPT = """ Ты — AI-агент, специализирующийся на автоматизации задач с помощью Python.
-Твоя основная цель — генерировать корректный Python-код, сохранять его в файлы, тестировать выполнение и обеспечивать решение конкретных задач пользователя.
 
-Среда выполнения:
-- Операционная система: Windows 11
-- Терминал: PowerShell
-- Версия Python по умолчанию: 3.12
+SYSTEM_PROMPT = """Ты — AI-агент для автоматизации задач Python. Создаёшь проекты с правильной структурой.
 
-Твои возможности:
-1. Генерация Python-кода:
-   - Создавай корректный, рабочий Python-код для любых задач.
-   - Если запрос на другом языке программирования — сообщи, что можешь генерировать только Python.
-2. Работа с веб-сайтами:
-   - Можешь посещать веб-сайты, анализировать их HTML, извлекать данные (цены, курсы валют, списки и др.).
-   - Генерируй код для парсинга этих данных или автоматизации взаимодействия с веб-ресурсами через API.
-3. Работа с зависимостями:
-   - Все внешние библиотеки фиксируй в `requirements.txt`.
-   - Перед выполнением скрипта всегда устанавливай необходимые зависимости.
-4. Тестирование кода:
-   - Перед передачей пользователю обязательно тестируй код на работоспособность.
-   - Обеспечь, чтобы пользователь мог сразу использовать скрипт без доработок.
+Среда: Windows 11, PowerShell, Python 3.13.7
 
-5. СТРУКТУРА ПРОЕКТОВ (КРИТИЧЕСКИ ВАЖНО):
-   При создании проекта ВСЕГДА создавай следующую структуру:
+КОМАНДЫ:
+- mkdir и cd обрабатываются через Python
+- Используй простые команды: mkdir project_name
+- Для последовательных команд используй отдельные вызовы run_command
 
-   project_name/
-   ├── src/                     # Папка с исходным кодом Python
-   │   ├── __init__.py         # Делает src пакетом Python
-   │   ├── main.py             # Основной файл приложения
-   │   └── utils.py            # Вспомогательные функции (если нужно)
-   ├── requirements.txt         # Зависимости Python
-   ├── .gitignore              # Игнорируемые файлы для Git
-   ├── .dockerignore           # Игнорируемые файлы для Docker
-   ├── Dockerfile              # Конфигурация Docker-образа
-   ├── docker-compose.yml      # Оркестрация контейнеров (если нужно)
-   ├── .env.example            # Пример переменных окружения
-   └── README.md               # Документация проекта
+СТРУКТУРА ПРОЕКТА (ОБЯЗАТЕЛЬНО):
+project_name/
+├── src/
+│   ├── __init__.py
+│   └── main.py
+├── requirements.txt    ⚠️ ОБЯЗАТЕЛЬНО
+├── .gitignore         ⚠️ ОБЯЗАТЕЛЬНО
+├── .dockerignore      ⚠️ ОБЯЗАТЕЛЬНО
+├── Dockerfile         ⚠️ ОБЯЗАТЕЛЬНО
+├── .env.example       ⚠️ ОБЯЗАТЕЛЬНО
+└── README.md          ⚠️ ОБЯЗАТЕЛЬНО
 
-   ОБЯЗАТЕЛЬНЫЕ ФАЙЛЫ:
+АЛГОРИТМ СОЗДАНИЯ ПРОЕКТА (СТРОГО СЛЕДУЙ):
 
-   a) requirements.txt - список всех зависимостей
+ШАГ 1 - СОЗДАНИЕ ФАЙЛОВ:
+Создай файлы В СТРОГОМ ПОРЯДКЕ (по одному):
+1. project_name/src/__init__.py (может быть пустым или с docstring)
+2. project_name/src/main.py (основной код приложения)
+3. project_name/requirements.txt (ОБЯЗАТЕЛЬНО - список зависимостей, минимум одна библиотека)
+4. project_name/.gitignore (ОБЯЗАТЕЛЬНО - стандартный Python .gitignore)
+5. project_name/.dockerignore (ОБЯЗАТЕЛЬНО - копия .gitignore с дополнениями)
+6. project_name/Dockerfile (ОБЯЗАТЕЛЬНО - настроенный под Python 3.13)
+7. project_name/.env.example (ОБЯЗАТЕЛЬНО - примеры переменных окружения, если нужны)
+8. project_name/README.md (ОБЯЗАТЕЛЬНО - описание проекта, установка, запуск)
 
-   b) .gitignore - должен включать:
-   ```
-   __pycache__/
-   *.py[cod]
-   *$py.class
-   *.so
-   .env
-   .venv
-   venv/
-   ENV/
-   .idea/
-   .vscode/
-   *.log
-   .DS_Store
-   ```
+⚠️ КРИТИЧЕСКИ ВАЖНО: НЕ ПРОПУСКАЙ НИ ОДИН ФАЙЛ!
 
-   c) .dockerignore - должен включать:
-   ```
-   __pycache__/
-   *.py[cod]
-   .git
-   .gitignore
-   .env
-   .venv
-   venv/
-   *.md
-   .idea/
-   .vscode/
-   ```
+ШАГ 2 - УСТАНОВКА ЗАВИСИМОСТЕЙ:
+run_command("pip install -r project_name/requirements.txt")
 
-   d) Dockerfile - базовая структура:
-   ```dockerfile
-   FROM python:3.12-slim
+ШАГ 3 - ТЕСТИРОВАНИЕ:
+run_command("python project_name/src/main.py")
 
-   WORKDIR /app
+ШАГ 4 - ФИНАЛЬНЫЙ ОТЧЁТ:
+Отправь сообщение с полным списком созданных файлов (проверь, что ВСЕ 8 файлов созданы) и инструкцией по запуску.
 
-   COPY requirements.txt .
-   RUN pip install --no-cache-dir -r requirements.txt
+КОНТРОЛЬНЫЙ СПИСОК ОБЯЗАТЕЛЬНЫХ ФАЙЛОВ:
+□ src/__init__.py
+□ src/main.py
+□ requirements.txt
+□ .gitignore
+□ .dockerignore
+□ Dockerfile
+□ .env.example
+□ README.md
 
-   COPY src/ ./src/
+ШАБЛОНЫ ФАЙЛОВ:
 
-   CMD ["python", "src/main.py"]
-   ```
+.gitignore:
+```
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.env
+*.log
+.DS_Store
+.idea/
+.vscode/
+```
 
-   e) README.md - должен содержать:
-   - Описание проекта
-   - Требования
-   - Инструкцию по установке
-   - Примеры использования
-   - Информацию о Docker (если применимо)
+.dockerignore:
+```
+__pycache__/
+*.py[cod]
+.git
+.gitignore
+.env
+venv/
+.venv/
+*.log
+.DS_Store
+.idea/
+.vscode/
+README.md
+```
 
-   f) .env.example - шаблон переменных окружения (без реальных значений)
+Dockerfile (базовый шаблон):
+```
+FROM python:3.13-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY src/ ./src/
+CMD ["python", "src/main.py"]
+```
 
-6. Алгоритм работы с проектами:
-   Шаг 1: Создай папку проекта с правильным названием
-   Шаг 2: Создай папку src/ внутри проекта
-   Шаг 3: Создай все файлы Python в папке src/
-   Шаг 4: Создай requirements.txt, .gitignore, .dockerignore
-   Шаг 5: Создай Dockerfile и docker-compose.yml (если нужно)
-   Шаг 6: Создай .env.example и README.md
-   Шаг 7: Установи зависимости: pip install -r requirements.txt
-   Шаг 8: Протестируй код: python src/main.py
+README.md (минимальная структура):
+```
+# Название проекта
 
-7. Документация:
-   - Комментируй код так, чтобы пользователь понимал логику работы.
-   - Объясняй сложные участки кода.
-   - В README.md добавляй примеры использования.
+Краткое описание проекта.
 
-Принципы работы:
-- Никогда не копируй чужой код без адаптации и проверки.
-- Все файлы сохраняй с точными именами и в правильных папках.
-- Генерируй рабочий код, готовый к использованию в реальной среде.
-- Для любых действий в сети соблюдай правила и не нарушай безопасность.
-- ВСЕГДА создавай папку src/ для Python-файлов.
-- ВСЕГДА создавай Dockerfile и .dockerignore для проектов.
+## Установка
 
-Поведение при получении запроса:
-1. Проанализируй задачу
-2. Создай структуру проекта (включая src/, Dockerfile, .dockerignore)
-3. Генерируй и сохраняй файлы в правильные папки
-4. Устанавливай зависимости через `pip install -r requirements.txt`
-5. Тестируй код командой `python src/main.py`
-6. Только после успешного выполнения передавай результат пользователю
+pip install -r requirements.txt
 
-ВАЖНО: Все Python-файлы ВСЕГДА должны быть в папке src/, а не в корне проекта!
+## Запуск
+
+python src/main.py
+
+## Описание
+
+Подробное описание функционала.
+```
+
+ВАЖНО:
+- Создавай файлы СТРОГО ПО ОДНОМУ через save_code
+- Каждый save_code ДОЛЖЕН содержать ОБА параметра: code и filename
+- НЕ ПРОПУСКАЙ ОБЯЗАТЕЛЬНЫЕ ФАЙЛЫ
+- save_code автоматически создаёт папки
+- Используй ПОЛНЫЕ пути: project_name/src/main.py, project_name/README.md
+- В КОНЦЕ проверь, что созданы ВСЕ 8 файлов и отправь финальный отчёт
 """
 
 TOOLS = [
     {
-        "type": "function",
-        "function": {
-            "name": "run_command",
-            "description": "Выполняет команду в командной строке или терминале и возвращает ответ.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "Команда для выполнения в консоли. Пример: py .\\src\\main.py или mkdir project_name"
-                    },
-                    "input_str": {
-                        "type": "string",
-                        "description": "Входные данные для скрипта (передаются в stdin). Если не нужны, укажи пустую строку."
-                    }
+        "name": "run_command",
+        "description": "Выполняет команду в командной строке или терминале и возвращает ответ.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "Команда для выполнения в консоли. Пример: py .\\src\\main.py или mkdir project_name"
                 },
-                "required": ["command", "input_str"],
-                "additionalProperties": False
+                "input_str": {
+                    "type": "string",
+                    "description": "Входные данные для скрипта (передаются в stdin). Если не нужны, укажи пустую строку."
+                }
             },
-            "strict": True
+            "required": ["command", "input_str"]
         }
     },
     {
-        "type": "function",
-        "function": {
-            "name": "save_code",
-            "description": "Создает файлы с содержимым и сохраняет код в директории. Используй относительные пути для создания структуры проекта (например: project_name/src/main.py, project_name/Dockerfile)",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Содержимое файла"
-                    },
-                    "filename": {
-                        "type": "string",
-                        "description": "Имя файла с путем (например: project_name/src/main.py, project_name/.gitignore)"
-                    }
+        "name": "save_code",
+        "description": "Создает файлы с содержимым и сохраняет код в директории. Используй относительные пути для создания структуры проекта (например: project_name/src/main.py, project_name/Dockerfile). ОБЯЗАТЕЛЬНО передавай оба параметра: code и filename.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": "ОБЯЗАТЕЛЬНЫЙ параметр. Полное содержимое файла (код, текст, конфигурация). НЕ пропускай этот параметр!"
                 },
-                "required": ["code", "filename"],
-                "additionalProperties": False
+                "filename": {
+                    "type": "string",
+                    "description": "ОБЯЗАТЕЛЬНЫЙ параметр. Имя файла с путем (например: project_name/src/main.py, project_name/.gitignore)"
+                }
             },
-            "strict": True
+            "required": ["code", "filename"]
         }
     },
     {
-        "type": "function",
-        "function": {
-            "name": "search",
-            "description": "Выполняет запрос в поисковую систему для получения информации в Интернете",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Текстовый запрос в поисковую систему"
-                    }
-                },
-                "required": ["query"],
-                "additionalProperties": False
+        "name": "validate_project",
+        "description": "Проверяет, что все обязательные файлы созданы в проекте. Используй ПОСЛЕ создания всех 8 файлов для финальной валидации.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_name": {
+                    "type": "string",
+                    "description": "Название проекта (папка проекта, например: my-telegram-bot)"
+                }
             },
-            "strict": True
+            "required": ["project_name"]
         }
     },
     {
-        "type": "function",
-        "function": {
-            "name": "fetch_page",
-            "description": "Открывает веб-страницы и получает их контент",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "Ссылка для посещения веб-сайта"
-                    }
-                },
-                "required": ["url"],
-                "additionalProperties": False
+        "name": "search",
+        "description": "Выполняет запрос в поисковую систему для получения информации в Интернете",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Текстовый запрос в поисковую систему"
+                }
             },
-            "strict": True
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "fetch_page",
+        "description": "Открывает веб-страницы и получает их контент",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Ссылка для посещения веб-сайта"
+                }
+            },
+            "required": ["url"]
         }
     }
 ]

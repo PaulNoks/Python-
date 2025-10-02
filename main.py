@@ -1,38 +1,55 @@
+
 import json
-from config import HELICONE_API_KEY, SYSTEM_PROMPT, TOOLS
+from config import ANTHROPIC_API_KEY, SYSTEM_PROMPT, TOOLS
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from loguru import logger
-from function import run_command, save_code, search, fetch_page
-from openai import AsyncOpenAI
+from function import run_command, save_code, search, fetch_page, validate_project
+from anthropic import AsyncAnthropic
 
 app = FastAPI()
 
-openai_client = AsyncOpenAI(
-    base_url="https://oai.helicone.ai/v1",
-    default_headers={
-        "Helicone-Auth": f"Bearer {HELICONE_API_KEY}"
-    }
-)
+anthropic_client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 
 
 @app.get("/")
 async def index():
     with open("index.html", "r", encoding="UTF-8") as f:
         html = f.read()
-
     return HTMLResponse(html)
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    chat_history = [{
-        "role": "system",
-        "content": SYSTEM_PROMPT,
-    }]
+    chat_history = []
+    
+    # Функция для ограничения истории чата
+    def trim_chat_history(history, max_messages=20):
+        """
+        Умно обрезает историю, сохраняя связи tool_use -> tool_result
+        """
+        if len(history) <= max_messages:
+            return history
+        
+        # Оставляем последние сообщения
+        trimmed = history[-max_messages:]
+        
+        # Проверяем первое сообщение - если это tool_result, удаляем его
+        while trimmed and trimmed[0].get("role") == "user":
+            content = trimmed[0].get("content", [])
+            # Если это список с tool_result, удаляем
+            if isinstance(content, list) and any(
+                isinstance(item, dict) and item.get("type") == "tool_result" 
+                for item in content
+            ):
+                trimmed.pop(0)
+            else:
+                break
+        
+        return trimmed
 
     try:
         while True:
@@ -47,72 +64,119 @@ async def websocket_endpoint(websocket: WebSocket):
 
             while True:
                 try:
-                    ai_response = await openai_client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=chat_history,
+                    # Ограничиваем историю перед запросом
+                    trimmed_history = trim_chat_history(chat_history, max_messages=10)
+                    
+                    # Логируем для отладки
+                    logger.debug(f"История содержит {len(trimmed_history)} сообщений")
+                    for i, msg in enumerate(trimmed_history):
+                        logger.debug(f"  [{i}] role={msg.get('role')}, content_type={type(msg.get('content'))}")
+                    
+                    ai_response = await anthropic_client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=3000,
+                        system=SYSTEM_PROMPT,
+                        messages=trimmed_history,
                         tools=TOOLS,
-                        tool_choice="auto",
-                        parallel_tool_calls=True
+                        tool_choice={"type": "auto"}  # Явно указываем auto без parallel
                     )
 
-                    ai_message = ai_response.choices[0].message
-
-                    # Добавляем сообщение AI в историю
-                    chat_history.append({
+                    # Добавляем ответ ассистента в историю
+                    assistant_message = {
                         "role": "assistant",
-                        "content": ai_message.content,
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": tc.type,
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments
-                                }
-                            }
-                            for tc in ai_message.tool_calls
-                        ] if ai_message.tool_calls else None
-                    })
+                        "content": ai_response.content
+                    }
+                    chat_history.append(assistant_message)
 
-                    if not ai_message.tool_calls:
-                        await websocket.send_text(json.dumps({
-                            "role": "assistant",
-                            "content": ai_message.content
-                        }))
+                    # Проверяем, есть ли вызовы инструментов
+                    tool_calls = [block for block in ai_response.content if block.type == "tool_use"]
+
+                    if not tool_calls:
+                        # Если нет вызовов инструментов, отправляем текстовый ответ
+                        text_content = next((block.text for block in ai_response.content if hasattr(block, 'text')), "")
+                        if text_content:
+                            await websocket.send_text(json.dumps({
+                                "role": "assistant",
+                                "content": text_content
+                            }))
                         break
 
                     # Уведомляем пользователя о выполнении функций
-                    tool_names = [tc.function.name for tc in ai_message.tool_calls]
+                    tool_names = [tc.name for tc in tool_calls]
                     await websocket.send_text(json.dumps({
                         "role": "system",
                         "content": f"⚙️ Выполняю действия: {', '.join(tool_names)}..."
                     }))
 
-                    for tool_call in ai_message.tool_calls:
-                        func_name = tool_call.function.name
-                        args = json.loads(tool_call.function.arguments)
+                    # Выполняем все вызовы инструментов
+                    tool_results = []
+                    for tool_call in tool_calls:
+                        func_name = tool_call.name
+                        args = tool_call.input
+
+                        # Подробное логирование аргументов
+                        logger.info(f"Вызов функции: {func_name}")
+                        logger.debug(f"  Аргументы: {args}")
+                        logger.debug(f"  Тип аргументов: {type(args)}")
+                        logger.debug(f"  Ключи: {list(args.keys()) if isinstance(args, dict) else 'N/A'}")
 
                         result = ""
 
                         try:
-                            logger.info(f"Вызов функции: {func_name} с аргументами: {args}")
 
                             if func_name == "run_command":
-                                if "input_str" in args:
-                                    result = run_command(args["command"], args["input_str"])
+                                if "command" not in args:
+                                    result = "❌ Ошибка: отсутствует параметр 'command'"
                                 else:
-                                    result = run_command(args["command"], "")
+                                    input_str = args.get("input_str", "")
+                                    result = run_command(args["command"], input_str)
                             elif func_name == "save_code":
-                                result = save_code(args["code"], args["filename"])
-                                # Уведомляем о создании файла
-                                await websocket.send_text(json.dumps({
-                                    "role": "system",
-                                    "content": f"✅ Создан файл: {args['filename']}"
-                                }))
+                                if "code" not in args or "filename" not in args:
+                                    missing = []
+                                    if "code" not in args:
+                                        missing.append("code (содержимое файла)")
+                                    if "filename" not in args:
+                                        missing.append("filename (путь к файлу)")
+                                    result = f"❌ КРИТИЧЕСКАЯ ОШИБКА: Пропущены обязательные параметры: {', '.join(missing)}. Получены только: {list(args.keys())}. ВСЕГДА передавай ОБА параметра в save_code!"
+                                else:
+                                    result = save_code(args["code"], args["filename"])
+                                    # Уведомляем о создании файла с эмодзи прогресса
+                                    file_type = "📄"
+                                    if args["filename"].endswith(".py"):
+                                        file_type = "🐍"
+                                    elif args["filename"].endswith("README.md"):
+                                        file_type = "📖"
+                                    elif args["filename"].endswith("Dockerfile"):
+                                        file_type = "🐳"
+                                    elif args["filename"].endswith(".gitignore") or args["filename"].endswith(".dockerignore"):
+                                        file_type = "🚫"
+                                    elif args["filename"].endswith("requirements.txt"):
+                                        file_type = "📦"
+                                    
+                                    await websocket.send_text(json.dumps({
+                                        "role": "system",
+                                        "content": f"{file_type} Создан файл: {args['filename']}"
+                                    }))
+                            elif func_name == "validate_project":
+                                if "project_name" not in args:
+                                    result = "❌ Ошибка: отсутствует параметр 'project_name'"
+                                else:
+                                    result = validate_project(args["project_name"])
+                                    # Отправляем отчёт валидации пользователю
+                                    await websocket.send_text(json.dumps({
+                                        "role": "system",
+                                        "content": f"📋 Валидация проекта {args['project_name']}"
+                                    }))
                             elif func_name == "search":
-                                result = search(args["query"])
+                                if "query" not in args:
+                                    result = "❌ Ошибка: отсутствует параметр 'query'"
+                                else:
+                                    result = search(args["query"])
                             elif func_name == "fetch_page":
-                                result = await fetch_page(args["url"])
+                                if "url" not in args:
+                                    result = "❌ Ошибка: отсутствует параметр 'url'"
+                                else:
+                                    result = await fetch_page(args["url"])
                             else:
                                 result = f"Неизвестная функция {func_name}"
 
@@ -120,18 +184,47 @@ async def websocket_endpoint(websocket: WebSocket):
                             logger.error(f"Ошибка вызова функции {func_name}: {str(e)}")
                             result = f"Ошибка вызова функции {func_name}: {str(e)[:2000]}"
 
-                        chat_history.append({
-                            "role": "tool",
-                            "content": result,
-                            "tool_call_id": tool_call.id
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_call.id,
+                            "content": result
                         })
 
+                    # Добавляем результаты инструментов в историю
+                    chat_history.append({
+                        "role": "user",
+                        "content": tool_results
+                    })
+
                 except Exception as e:
-                    logger.error(f"Ошибка при обработке запроса: {str(e)}")
-                    await websocket.send_text(json.dumps({
-                        "role": "assistant",
-                        "content": f"❌ Произошла ошибка: {str(e)[:500]}"
-                    }))
+                    error_message = str(e)
+                    logger.error(f"Ошибка при обработке запроса: {error_message}")
+                    
+                    # Специальная обработка rate limit
+                    if "rate_limit_error" in error_message or "429" in error_message:
+                        await websocket.send_text(json.dumps({
+                            "role": "assistant",
+                            "content": "⏳ Достигнут лимит запросов API. Подождите 1 минуту и попробуйте снова."
+                        }))
+                    # Обработка ошибок валидации (tool_use/tool_result)
+                    elif "invalid_request_error" in error_message or "tool_use_id" in error_message:
+                        logger.warning("Сброс истории из-за ошибки валидации")
+                        # Очищаем историю, оставляя только последнее сообщение пользователя
+                        user_messages = [msg for msg in chat_history if msg.get("role") == "user" and isinstance(msg.get("content"), str)]
+                        if user_messages:
+                            chat_history = [user_messages[-1]]
+                        else:
+                            chat_history = []
+                        
+                        await websocket.send_text(json.dumps({
+                            "role": "assistant",
+                            "content": "🔄 История чата сброшена из-за ошибки. Повторите ваш запрос."
+                        }))
+                    else:
+                        await websocket.send_text(json.dumps({
+                            "role": "assistant",
+                            "content": f"❌ Произошла ошибка: {error_message[:500]}"
+                        }))
                     break
 
     except WebSocketDisconnect:
