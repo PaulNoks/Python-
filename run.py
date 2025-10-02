@@ -5,9 +5,10 @@
 import uvicorn
 
 if __name__ == "__main__":
-    print("🚀 Запуск AI Code Agent сервера...")
+    print("🚀 Запуск AI SRE-DevOps Agent сервера...")
     print("📝 Автоперезагрузка ОТКЛЮЧЕНА для стабильного WebSocket соединения")
     print("🌐 Сервер доступен: http://localhost:8000")
+    print("⚙️  DevOps помощник: Kubernetes, Terraform, Ansible, CI/CD, Мониторинг")
     print("⚠️  Для применения изменений перезапустите сервер вручную\n")
 
     uvicorn.run(

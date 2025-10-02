@@ -9,3 +9,4 @@ beautifulsoup4
 openai
 playwright
 lxml
+pyyaml

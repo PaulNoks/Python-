@@ -1,6 +1,7 @@
 import os
 import subprocess
 import requests
+import yaml
 from loguru import logger
 from config import SERPER_API_KEY
 from playwright.async_api import async_playwright
@@ -262,6 +263,155 @@ def validate_project(project_name: str) -> str:
         logger.success(f"Проект {project_name} успешно создан")
 
     return result
+
+
+def validate_yaml(filepath: str) -> str:
+    """
+    Проверяет синтаксис YAML файла
+    """
+    logger.info(f"Валидация YAML: {filepath}")
+    try:
+        full_path = os.path.join("./ai", filepath)
+
+        if not os.path.exists(full_path):
+            return f"❌ Файл {filepath} не найден"
+
+        with open(full_path, "r", encoding="UTF-8") as f:
+            yaml_content = yaml.safe_load(f)
+
+        logger.success(f"YAML файл {filepath} валиден")
+        return f"✅ YAML файл {filepath} валиден\n\nСтруктура:\n{yaml.dump(yaml_content, allow_unicode=True, default_flow_style=False)[:1000]}"
+
+    except yaml.YAMLError as e:
+        logger.error(f"Ошибка синтаксиса YAML в {filepath}: {str(e)}")
+        return f"❌ Ошибка синтаксиса YAML в {filepath}:\n{str(e)}"
+    except Exception as e:
+        logger.error(f"Ошибка при валидации {filepath}: {str(e)}")
+        return f"❌ Ошибка при валидации: {str(e)[:5000]}"
+
+
+def validate_terraform(project_path: str) -> str:
+    """
+    Проверяет синтаксис Terraform конфигурации
+    """
+    logger.info(f"Валидация Terraform: {project_path}")
+    try:
+        full_path = os.path.join("./ai", project_path)
+
+        if not os.path.exists(full_path):
+            return f"❌ Папка {project_path} не найдена"
+
+        # Проверяем наличие terraform
+        check_cmd = subprocess.run(
+            ["powershell.exe", "-Command", "terraform --version"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if check_cmd.returncode != 0:
+            return "⚠️ Terraform не установлен. Установите Terraform для валидации: https://www.terraform.io/downloads"
+
+        # Выполняем terraform fmt для проверки форматирования
+        fmt_cmd = subprocess.run(
+            ["powershell.exe", "-Command", f"terraform fmt -check {full_path}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd="./ai/"
+        )
+
+        # Выполняем terraform validate
+        validate_cmd = subprocess.run(
+            ["powershell.exe", "-Command", f"cd {full_path}; terraform init -backend=false; terraform validate"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd="./ai/"
+        )
+
+        result = "=== ВАЛИДАЦИЯ TERRAFORM ===\n\n"
+
+        if fmt_cmd.returncode == 0:
+            result += "✅ Форматирование: OK\n"
+        else:
+            result += f"⚠️ Форматирование: требуется исправление\n{fmt_cmd.stdout}\n"
+
+        if validate_cmd.returncode == 0:
+            result += f"✅ Валидация: OK\n{validate_cmd.stdout}"
+        else:
+            result += f"❌ Валидация: ошибки найдены\n{validate_cmd.stderr}"
+
+        logger.success(f"Terraform валидация завершена для {project_path}")
+        return result
+
+    except subprocess.TimeoutExpired:
+        return "❌ Превышено время ожидания валидации Terraform"
+    except Exception as e:
+        logger.error(f"Ошибка при валидации Terraform: {str(e)}")
+        return f"❌ Ошибка при валидации Terraform: {str(e)[:5000]}"
+
+
+def lint_dockerfile(filepath: str) -> str:
+    """
+    Проверяет Dockerfile с помощью базовых правил
+    """
+    logger.info(f"Линтинг Dockerfile: {filepath}")
+    try:
+        full_path = os.path.join("./ai", filepath)
+
+        if not os.path.exists(full_path):
+            return f"❌ Файл {filepath} не найден"
+
+        with open(full_path, "r", encoding="UTF-8") as f:
+            content = f.read()
+
+        issues = []
+        recommendations = []
+
+        # Базовые проверки
+        lines = content.split('\n')
+
+        # Проверка FROM
+        if not any(line.strip().startswith('FROM ') for line in lines):
+            issues.append("❌ Отсутствует инструкция FROM")
+
+        # Проверка на использование latest
+        if 'FROM' in content and ':latest' in content:
+            recommendations.append("⚠️ Рекомендуется избегать тега :latest, используйте конкретные версии")
+
+        # Проверка WORKDIR
+        if not any(line.strip().startswith('WORKDIR ') for line in lines):
+            recommendations.append("⚠️ Рекомендуется использовать WORKDIR вместо cd")
+
+        # Проверка на apt-get update без clean
+        if 'apt-get update' in content and 'apt-get clean' not in content:
+            recommendations.append("⚠️ После apt-get update рекомендуется добавить apt-get clean для уменьшения размера образа")
+
+        # Проверка COPY/ADD
+        if not any(line.strip().startswith(('COPY ', 'ADD ')) for line in lines):
+            recommendations.append("⚠️ Не найдены инструкции COPY или ADD")
+
+        # Проверка CMD/ENTRYPOINT
+        if not any(line.strip().startswith(('CMD ', 'ENTRYPOINT ')) for line in lines):
+            issues.append("❌ Отсутствует CMD или ENTRYPOINT")
+
+        result = f"=== ЛИНТИНГ DOCKERFILE: {filepath} ===\n\n"
+
+        if not issues and not recommendations:
+            result += "✅ Dockerfile выглядит хорошо!\n"
+        else:
+            if issues:
+                result += "Критические проблемы:\n" + "\n".join(issues) + "\n\n"
+            if recommendations:
+                result += "Рекомендации:\n" + "\n".join(recommendations) + "\n"
+
+        logger.success(f"Линтинг Dockerfile завершён для {filepath}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Ошибка при линтинге Dockerfile: {str(e)}")
+        return f"❌ Ошибка при линтинге: {str(e)[:5000]}"
 
 
 # Тестирование

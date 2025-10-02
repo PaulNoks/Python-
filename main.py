@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from loguru import logger
-from function import run_command, save_code, search, fetch_page, validate_project
+from function import run_command, save_code, search, fetch_page, validate_project, validate_yaml, validate_terraform, lint_dockerfile
 from anthropic import AsyncAnthropic
 
 app = FastAPI()
@@ -148,10 +148,18 @@ async def websocket_endpoint(websocket: WebSocket):
                                         file_type = "📖"
                                     elif args["filename"].endswith("Dockerfile"):
                                         file_type = "🐳"
-                                    elif args["filename"].endswith(".gitignore") or args["filename"].endswith(".dockerignore"):
+                                    elif args["filename"].endswith(".gitignore") or args["filename"].endswith(".dockerignore") or args["filename"].endswith(".terraformignore"):
                                         file_type = "🚫"
                                     elif args["filename"].endswith("requirements.txt"):
                                         file_type = "📦"
+                                    elif args["filename"].endswith((".yaml", ".yml")):
+                                        file_type = "⚙️"
+                                    elif args["filename"].endswith(".tf") or args["filename"].endswith(".tfvars"):
+                                        file_type = "🔧"
+                                    elif args["filename"].endswith((".sh", ".bash")):
+                                        file_type = "📜"
+                                    elif args["filename"].endswith(".json"):
+                                        file_type = "🔧"
                                     
                                     await websocket.send_text(json.dumps({
                                         "role": "system",
@@ -177,6 +185,33 @@ async def websocket_endpoint(websocket: WebSocket):
                                     result = "❌ Ошибка: отсутствует параметр 'url'"
                                 else:
                                     result = await fetch_page(args["url"])
+                            elif func_name == "validate_yaml":
+                                if "filepath" not in args:
+                                    result = "❌ Ошибка: отсутствует параметр 'filepath'"
+                                else:
+                                    result = validate_yaml(args["filepath"])
+                                    await websocket.send_text(json.dumps({
+                                        "role": "system",
+                                        "content": f"📋 Валидация YAML: {args['filepath']}"
+                                    }))
+                            elif func_name == "validate_terraform":
+                                if "project_path" not in args:
+                                    result = "❌ Ошибка: отсутствует параметр 'project_path'"
+                                else:
+                                    result = validate_terraform(args["project_path"])
+                                    await websocket.send_text(json.dumps({
+                                        "role": "system",
+                                        "content": f"🔧 Валидация Terraform: {args['project_path']}"
+                                    }))
+                            elif func_name == "lint_dockerfile":
+                                if "filepath" not in args:
+                                    result = "❌ Ошибка: отсутствует параметр 'filepath'"
+                                else:
+                                    result = lint_dockerfile(args["filepath"])
+                                    await websocket.send_text(json.dumps({
+                                        "role": "system",
+                                        "content": f"🐳 Линтинг Dockerfile: {args['filepath']}"
+                                    }))
                             else:
                                 result = f"Неизвестная функция {func_name}"
 
